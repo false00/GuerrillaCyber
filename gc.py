@@ -25,6 +25,7 @@ import json
 def main():
     win = Windows()
     #result = win.powershell('query user')
+    #git
     logs, event_ids = win.evtx_parse('C:\\Users\\juanc\\OneDrive\\Desktop\\Demo\\Server\\Logs\\Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx')
     result = win.powershell("(quser) -replace '\s{2,}', ',' | ConvertFrom-Csv")
 
