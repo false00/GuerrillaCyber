@@ -4,7 +4,7 @@
 import subprocess
 import traceback
 import concurrent.futures
-
+import time
 from Evtx.Evtx import FileHeader
 from Evtx.Views import evtx_file_xml_view
 import mmap
@@ -13,6 +13,7 @@ import xmltodict
 from datetime import datetime
 from collections import OrderedDict
 import json
+
 # TODO - Active Users
 # TODO - Processes Opened by User
 # TODO - Recent PowerShell Commands
@@ -20,38 +21,100 @@ import json
 # TODO - Kill Processes
 # TODO - Scheduled Events
 # TODO - Ingress Traffic
+# TODO - Avoid Detection, Avoid Being killed by other processes
 
 
 def main():
-    win = Windows()
-    #result = win.powershell('query user')
-    logs, event_ids = win.evtx_parse('C:\\Users\\juanc\\OneDrive\\Desktop\\Demo\\Server\\Logs\\Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx')
-    result = win.powershell("(quser) -replace '\s{2,}', ',' | ConvertFrom-Csv")
-
-    for i in logs:
+    while True:
         try:
-            timestamp = i["System"]["TimeCreated"]["@SystemTime"]
-            username = i['UserData']['EventXML']['Param1']
+            watch = UserWatch()
+            watch.windows()
+            time.sleep(1)
+        except Exception as error:
+            message = f'Error | main() | {error}'
+            print(message)
 
-            ##TEST
-            username = username.replace('jortega', 'juanc')
 
-            hostname_account_type = i['UserData']['EventXML']['Param2']
-            ip_address = i['UserData']['EventXML']['Param3']
-            print(timestamp, username, hostname_account_type, ip_address)
-        except:
-            pass
+class UserWatch:
 
-    # Get User Names returned
-    result = result.stdout.decode()
-    quser_username = [line for line in result.split('\n') if "USERNAME" in line]
-    quser_state = [line for line in result.split('\n') if "STATE" in line]
-    quser_idle_time = [line for line in result.split('\n') if "IDLE TIME" in line]
-    quser_logon_time = [line for line in result.split('\n') if "LOGON TIME" in line]
+    @staticmethod
+    def windows():
+        win_detect = DetectionEngineWin()
+        quser_results = win_detect.query_user()
 
-    print(quser_username, quser_state, quser_idle_time, quser_logon_time)
-    for _ in quser_username:
-        print(_)
+        term_serv_remote_conn = 'C:\\Windows\\System32\\winevt\\Logs\\' \
+                                'Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx'
+
+        win = Windows()
+
+        logs, event_ids = win.evtx_parse(term_serv_remote_conn)
+
+        for i in logs:
+            try:
+                timestamp = i["System"]["TimeCreated"]["@SystemTime"]
+                username = i['UserData']['EventXML']['Param1']
+
+                hostname_account_type = i['UserData']['EventXML']['Param2']
+                ip_address = i['UserData']['EventXML']['Param3']
+
+                for _ in quser_results:
+                    if _[0] == username:
+                        print("Quser: ", _, "| Remote Connection Logs:", timestamp, username, hostname_account_type,
+                              ip_address)
+            except Exception as error:
+                message = f'Error | UserWatch.windows() | {error}'
+                print(message)
+
+
+class DetectionEngineWin:
+
+    @staticmethod
+    def query_user():
+        win = Windows()
+
+        result = win.powershell("(quser) -replace '\s{2,}', ',' | ConvertFrom-Csv")
+
+        # quser stout
+        result = result.stdout.decode()
+
+        # UserName
+        quser_username = [line for line in result.split('\n') if "USERNAME" in line]
+        for i, username in enumerate(quser_username):
+            quser_username[i] = username.split(':')[1].replace('>', '').strip()
+
+        # Session Name
+        quser_sessionname = [line for line in result.split('\n') if 'SESSIONNAME' in line]
+        for i, sessionname in enumerate(quser_sessionname):
+            quser_sessionname[i] = sessionname.split(':')[1].strip()
+
+        # Query State
+        quser_state = [line for line in result.split('\n') if "STATE" in line]
+        for i, state in enumerate(quser_state):
+            quser_state[i] = state.split(':')[1].replace('>', '').strip()
+
+        # Idle Time
+        quser_idle_time = [line for line in result.split('\n') if "IDLE TIME" in line]
+        for i, idle_time in enumerate(quser_idle_time):
+            quser_idle_time[i] = idle_time.split(':')[1].replace('>', '').strip()
+
+        # Logon Time
+        quser_logon_time = [line for line in result.split('\n') if "LOGON TIME" in line]
+        for i, logon_time in enumerate(quser_logon_time):
+            try:
+                quser_logon_time[i] = logon_time.split(': ')[1].replace('>', '').strip()
+                quser_logon_time[i] = datetime.strptime(quser_logon_time[i], "%m/%d/%Y %H:%M %p")
+                quser_logon_time[i] = str(quser_logon_time[i].isoformat())
+            except:
+                quser_logon_time[i] = ''
+
+        # Refactor Array
+        quser_array = []
+        for (a, b, c, d, e) in zip(quser_username, quser_sessionname, quser_state, quser_idle_time, quser_logon_time):
+            entry = []
+            entry.extend([a, b, c, d, e])
+            quser_array.append(entry)
+
+        return quser_array
 
 
 class Windows:
@@ -133,8 +196,6 @@ class Windows:
                     else:
                         log_line["RawData"] = str(data)
                         del log_line["Event"]
-            else:
-                pass
 
             try:
                 # Whole Message
