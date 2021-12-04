@@ -32,7 +32,7 @@ def main():
             time.sleep(1)
         except Exception as error:
             message = f'Error | main() | {error}'
-            print(message)
+            pass
 
 
 class UserWatch:
@@ -63,7 +63,7 @@ class UserWatch:
                               ip_address)
             except Exception as error:
                 message = f'Error | UserWatch.windows() | {error}'
-                print(message)
+                pass
 
 
 class DetectionEngineWin:
