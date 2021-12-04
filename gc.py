@@ -2,7 +2,6 @@
 # GuerrillaCyber
 
 import subprocess
-import traceback
 import concurrent.futures
 import time
 from Evtx.Evtx import FileHeader
@@ -13,6 +12,8 @@ import xmltodict
 from datetime import datetime
 from collections import OrderedDict
 import json
+import sqlite3
+from sqlite3 import Error
 
 # TODO - Active Users
 # TODO - Processes Opened by User
@@ -25,10 +26,14 @@ import json
 
 
 def main():
+    # Create Database in memory
+    create_db = DatabaseTools()
+    conn = create_db.create_active_users_db()
+
     while True:
         try:
             watch = UserWatch()
-            watch.windows()
+            watch.windows(conn)
             time.sleep(1)
         except Exception as error:
             message = f'Error | main() | {error}'
@@ -37,8 +42,7 @@ def main():
 
 class UserWatch:
 
-    @staticmethod
-    def windows():
+    def windows(self, conn):
         win_detect = DetectionEngineWin()
         quser_results = win_detect.query_user()
 
@@ -61,6 +65,7 @@ class UserWatch:
                     if _[0] == username:
                         print("Quser: ", _, "| Remote Connection Logs:", timestamp, username, hostname_account_type,
                               ip_address)
+
             except Exception as error:
                 message = f'Error | UserWatch.windows() | {error}'
                 pass
@@ -213,6 +218,72 @@ class Windows:
 
         except:
             pass
+
+
+class DatabaseTools:
+
+    @staticmethod
+    def create_connection(db_file):
+        """ create a database connection to the SQLite database
+            specified by db_file
+        :param db_file: database file
+        :return: Connection object or None
+        """
+        conn = None
+        try:
+            conn = sqlite3.connect(db_file)
+            return conn
+        except Error as e:
+            print(e)
+
+        return conn
+
+    @staticmethod
+    def create_table(conn, create_table_sql):
+        """ create a table from the create_table_sql statement
+        :param conn: Connection object
+        :param create_table_sql: a CREATE TABLE statement
+        :return:
+        """
+        try:
+            c = conn.cursor()
+            c.execute(create_table_sql)
+        except Error as e:
+            print(e)
+
+    def create_active_users_db(self):
+        # create a database connection
+        database = ':memory:'
+        conn = self.create_connection(database)
+        # Quser:  ['jortega', 'rdp-tcp#27', 'Active', '.', '2021-11-26T11:49:00'] | Remote Connection Logs: 2021-11-29T02:53:18.033215 jortega None 192.168.1.233
+        active_users_sql = """ CREATE TABLE IF NOT EXISTS quser (
+                                                id integer PRIMARY KEY,
+                                                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                                                username text,
+                                                sessionname text,
+                                                state text,
+                                                idletime text,
+                                                logontime DATETIME 
+                                            ); """
+
+        evtx_rdp_operational_sql = """ CREATE TABLE IF NOT EXISTS evtx_rdp_ops (
+                                                id integer PRIMARY KEY,
+                                                timestamp DATETIME,
+                                                username text,
+                                                hostname text,
+                                                ip text
+                                            ); """
+        # create tables
+        if conn is not None:
+            # create active users table
+            self.create_table(conn, active_users_sql)
+
+            # create evtx TerminalServices-RemoteConnectionManager%4Operational table
+            self.create_table(conn, evtx_rdp_operational_sql)
+        else:
+            print("Error! cannot create the database connection.")
+
+        return conn
 
 
 if __name__ == "__main__":
