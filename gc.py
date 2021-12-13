@@ -14,6 +14,7 @@ from collections import OrderedDict
 import json
 import sqlite3
 from sqlite3 import Error
+from base64 import b64encode
 
 # TODO - Active Users
 # TODO - Processes Opened by User
@@ -43,8 +44,22 @@ def main():
 class UserWatch:
 
     def windows(self, conn):
-        win_detect = DetectionEngineWin()
-        quser_results = win_detect.query_user()
+        cli_win = CLIWin()
+
+        netstat_results = cli_win.netstat()
+
+        #print(netstat_results)
+        for _ in netstat_results:
+            if ':3389' in _[1]:
+                message = f'UserWatch.Windows | Network | Ingress (Incoming) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                          f'State: {_[3]},  PID: {_[4]}'
+                print(message)
+            if ':3389' in _[2]:
+                message = f'UserWatch.Windows | Network | Egress (Outgoing) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                          f'State: {_[3]},  PID: {_[4]}'
+                print(message)
+
+        quser_results = cli_win.query_user()
 
         term_serv_remote_conn = 'C:\\Windows\\System32\\winevt\\Logs\\' \
                                 'Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx'
@@ -63,7 +78,7 @@ class UserWatch:
 
                 for _ in quser_results:
                     if _[0] == username:
-                        print("Quser: ", _, "| Remote Connection Logs:", timestamp, username, hostname_account_type,
+                        print("Quser: ", _, "| EVTX:", timestamp, username, hostname_account_type,
                               ip_address)
 
             except Exception as error:
@@ -71,13 +86,16 @@ class UserWatch:
                 pass
 
 
-class DetectionEngineWin:
+
+
+class CLIWin:
 
     @staticmethod
     def query_user():
         win = Windows()
 
-        result = win.powershell("(quser) -replace '\s{2,}', ',' | ConvertFrom-Csv")
+        cmd = r"(quser) -replace '\s{2,}', ',' | ConvertFrom-Csv"
+        result = win.powershell(cmd)
 
         # quser stout
         result = result.stdout.decode()
@@ -121,6 +139,53 @@ class DetectionEngineWin:
 
         return quser_array
 
+    @staticmethod
+    def netstat():
+        win = Windows()
+        cmd = r'(netstat -bano | Select -skip 2) -join "`n" -split "(?= [TU][CD]P\s+(?:\d+\.|\[\w*:\w*:))" | ' \
+              r'ForEach-Object {$_.trim() -replace "`n"," " -replace "\s{2,}",","} | ConvertFrom-Csv'
+
+        cmd = cmd
+
+        result = win.powershell(cmd)
+
+        # netstat stout
+        result = result.stdout.decode()
+
+        # Proto
+        proto = [line for line in result.split('\n') if "Proto" in line]
+        for i, p in enumerate(proto):
+            proto[i] = p.split(' : ')[1].strip()
+
+        # Local Address
+        local_address = [line for line in result.split('\n') if 'Local' in line]
+        for i, local in enumerate(local_address):
+            local_address[i] = local.split(' : ')[1].strip()
+
+        # Foreign Address
+        foreign_address = [line for line in result.split('\n') if "Foreign" in line]
+        for i, foreign in enumerate(foreign_address):
+            foreign_address[i] = foreign.split(' : ')[1].strip()
+
+        # State
+        state = [line for line in result.split('\n') if "State" in line]
+        for i, s in enumerate(state):
+            state[i] = s.split(' : ')[1].strip()
+
+        # PID
+        pid = [line for line in result.split('\n') if "PID" in line]
+        for i, p in enumerate(pid):
+            pid[i] = p.split(' : ')[1].strip()
+
+        # Refactor Array
+        netconns = []
+        for (a, b, c, d, e) in zip(proto, local_address, foreign_address, state, pid):
+            entry = []
+            entry.extend([a, b, c, d, e])
+            netconns.append(entry)
+
+        return netconns
+
 
 class Windows:
     log_array = []
@@ -129,6 +194,13 @@ class Windows:
     @staticmethod
     def powershell(cmd):
         completed = subprocess.run(["powershell", "-Command", cmd], capture_output=True)
+        return completed
+
+    @staticmethod
+    def powershell_b64(cmd):
+        # Encode commands like so: cat raw.txt | iconv --to-code UTF-16LE | base64 -w 0
+        cmd = b64encode(cmd.encode('UTF-16LE'))
+        completed = subprocess.run(["powershell", "-EncodedCommand", cmd], capture_output=True)
         return completed
 
     def evtx_parse(self, log_path):
