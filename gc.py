@@ -31,9 +31,9 @@ def main():
     create_db = DatabaseTools()
     conn = create_db.create_active_users_db()
 
+    watch = UserWatch()
     while True:
         try:
-            watch = UserWatch()
             watch.windows(conn)
             time.sleep(1)
         except Exception as error:
@@ -42,22 +42,28 @@ def main():
 
 
 class UserWatch:
+    # Compare over class init
+    new_conn_win = []
+    new_quser_watch = []
 
     def windows(self, conn):
         cli_win = CLIWin()
 
         netstat_results = cli_win.netstat()
 
-        #print(netstat_results)
         for _ in netstat_results:
             if ':3389' in _[1]:
-                message = f'UserWatch.Windows | Network | Ingress (Incoming) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
-                          f'State: {_[3]},  PID: {_[4]}'
-                print(message)
+                if _ not in self.new_conn_win:
+                    self.new_conn_win.append(_)
+                    message = f'UserWatch.Windows | Network | Ingress (Incoming) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                              f'State: {_[3]},  PID: {_[4]}'
+                    print(message)
             if ':3389' in _[2]:
-                message = f'UserWatch.Windows | Network | Egress (Outgoing) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
-                          f'State: {_[3]},  PID: {_[4]}'
-                print(message)
+                if _ not in self.new_conn_win:
+                    self.new_conn_win.append(_)
+                    message = f'UserWatch.Windows | Network | Egress (Outgoing) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                              f'State: {_[3]},  PID: {_[4]}'
+                    print(message)
 
         quser_results = cli_win.query_user()
 
@@ -67,6 +73,9 @@ class UserWatch:
         win = Windows()
 
         logs, event_ids = win.evtx_parse(term_serv_remote_conn)
+
+        # Compare by iter
+        evtx_dict = {}
 
         for i in logs:
             try:
@@ -78,14 +87,19 @@ class UserWatch:
 
                 for _ in quser_results:
                     if _[0] == username:
-                        print("Quser: ", _, "| EVTX:", timestamp, username, hostname_account_type,
-                              ip_address)
+                        if ip_address not in evtx_dict[username]['ips']:
+                            evtx_dict[username]['ips'] += [ip_address]
+
+                        if hostname_account_type not in evtx_dict[username]['hostnames']:
+                            evtx_dict[username]['hostnames'] += [hostname_account_type]
 
             except Exception as error:
                 message = f'Error | UserWatch.windows() | {error}'
                 pass
 
-
+        for _ in quser_results:
+            if _[0] == evtx_dict[_[0]]:
+                print(quser_results, evtx_dict[_[0]])
 
 
 class CLIWin:
