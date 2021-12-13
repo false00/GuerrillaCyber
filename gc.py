@@ -98,7 +98,10 @@ class UserWatch:
                 pass
 
         for _ in quser_results:
+            print(_)
+            print(evtx_dict[_[0]])
             if _[0] == evtx_dict[_[0]]:
+
                 print(quser_results, evtx_dict[_[0]])
 
 
