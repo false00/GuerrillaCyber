@@ -74,7 +74,7 @@ class UserWatch:
 
         logs, event_ids = win.evtx_parse(term_serv_remote_conn)
 
-        # Compare by iter
+        # Compare by iter #TODO Dictionary for tracking evtx activity
         evtx_dict = {}
 
         for i in logs:
@@ -88,20 +88,18 @@ class UserWatch:
                 for _ in quser_results:
                     if _[0] == username:
                         if ip_address not in evtx_dict[username]['ips']:
-                            evtx_dict[username]['ips'] += [ip_address]
+                            evtx_dict[username]['ips'] = evtx_dict[username]['ips'].append(ip_address)
 
                         if hostname_account_type not in evtx_dict[username]['hostnames']:
-                            evtx_dict[username]['hostnames'] += [hostname_account_type]
+                            evtx_dict[username]['hostnames'] = [hostname_account_type].append(hostname_account_type)
 
             except Exception as error:
                 message = f'Error | UserWatch.windows() | {error}'
                 pass
 
         for _ in quser_results:
-            print(_)
             print(evtx_dict[_[0]])
             if _[0] == evtx_dict[_[0]]:
-
                 print(quser_results, evtx_dict[_[0]])
 
 
