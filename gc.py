@@ -15,6 +15,7 @@ import json
 import sqlite3
 from sqlite3 import Error
 from base64 import b64encode
+import traceback
 
 # TODO - Active Users
 # TODO - Processes Opened by User
@@ -94,8 +95,9 @@ class UserWatch:
                             evtx_dict[username]['hostnames'] = [hostname_account_type].append(hostname_account_type)
 
             except Exception as error:
+                print(error)
                 message = f'Error | UserWatch.windows() | {error}'
-                pass
+                print(traceback.print_exc())
 
         for _ in quser_results:
             print(evtx_dict[_[0]])
