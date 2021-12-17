@@ -45,6 +45,7 @@ def main():
 class UserWatch:
     win_conn = []
     quser_conn = []
+    evtx_rdp = []
 
     def windows(self, conn):
         cli_win = CLIWin()
@@ -104,42 +105,32 @@ class UserWatch:
                 # Remove from quser_conn
                 self.quser_conn.remove(_)
 
-        # #term_serv_remote_conn = 'C:\\Windows\\System32\\winevt\\Logs\\' \
-        # #                        'Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx'
-        #
-        # win = Windows()
-        #
-        # logs, event_ids = win.evtx_parse(term_serv_remote_conn)
-        #
-        # # Compare by iter #TODO Dictionary for tracking evtx activity
-        # evtx_dict = {}
-        #
-        # for i in logs:
-        #     try:
-        #         timestamp = i["System"]["TimeCreated"]["@SystemTime"]
-        #         username = i['UserData']['EventXML']['Param1']
-        #
-        #         hostname_account_type = i['UserData']['EventXML']['Param2']
-        #         ip_address = i['UserData']['EventXML']['Param3']
-        #
-        #         for _ in quser_results:
-        #             if _[0] == username:
-        #
-        #                 if ip_address not in evtx_dict[username]['ips']:
-        #                     evtx_dict[username]['ips'] = evtx_dict[username]['ips'].append(ip_address)
-        #
-        #                 if hostname_account_type not in evtx_dict[username]['hostnames']:
-        #                     evtx_dict[username]['hostnames'] = [hostname_account_type].append(hostname_account_type)
-        #
-        #     except Exception as error:
-        #         print(error)
-        #         message = f'Error | UserWatch.windows() | {error}'
-        #         print(traceback.print_exc())
-        #
-        # for _ in quser_results:
-        #     print(evtx_dict[_[0]])
-        #     if _[0] == evtx_dict[_[0]]:
-        #         print(quser_results, evtx_dict[_[0]])
+        term_serv_remote_conn = 'C:\\Windows\\System32\\winevt\\Logs\\' \
+                                'Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx'
+
+        win = Windows()
+
+        logs, event_ids = win.evtx_parse(term_serv_remote_conn)
+
+        for i in logs:
+            try:
+                event_id = i['Event']['System']['EventID']['#text']
+                timestamp = i["System"]["TimeCreated"]["@SystemTime"]
+                username = i['UserData']['EventXML']['Param1']
+                hostname_account_type = i['UserData']['EventXML']['Param2']
+                ip_address = i['UserData']['EventXML']['Param3']
+
+                entry = [event_id, timestamp, username, hostname_account_type, ip_address]
+
+                if entry not in self.evtx_rdp:
+                    self.evtx_rdp.append(entry)
+
+                    message = f'UserWatch.windows | EVTX | Forensics | RDP CONN | event_id: {event_id}, timestamp: {timestamp}, ' \
+                              f'username: {username}, hostname_account_type: {hostname_account_type}, ' \
+                              f'ip_address: {ip_address}'
+                    print(message)
+            except:
+                pass
 
 
 class CLIWin:
