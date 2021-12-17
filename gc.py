@@ -43,66 +43,103 @@ def main():
 
 
 class UserWatch:
-    # Compare over class init
-    new_conn_win = []
-    new_quser_watch = []
+    win_conn = []
+    quser_conn = []
 
     def windows(self, conn):
         cli_win = CLIWin()
 
         netstat_results = cli_win.netstat()
-
-        for _ in netstat_results:
-            if ':3389' in _[1]:
-                if _ not in self.new_conn_win:
-                    self.new_conn_win.append(_)
-                    message = f'UserWatch.Windows | Network | Ingress (Incoming) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
-                              f'State: {_[3]},  PID: {_[4]}'
-                    print(message)
-            if ':3389' in _[2]:
-                if _ not in self.new_conn_win:
-                    self.new_conn_win.append(_)
-                    message = f'UserWatch.Windows | Network | Egress (Outgoing) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
-                              f'State: {_[3]},  PID: {_[4]}'
-                    print(message)
-
         quser_results = cli_win.query_user()
 
-        term_serv_remote_conn = 'C:\\Windows\\System32\\winevt\\Logs\\' \
-                                'Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx'
+        # check for rdp connections
+        for _ in netstat_results:
+            source_ip = _[1]
+            dest_ip = _[2]
 
-        win = Windows()
+            if ':3389' in source_ip:
+                if _ not in self.win_conn:
+                    self.win_conn.append(_)
+                    message = f'UserWatch.windows | Network | Connected | Ingress (Incoming) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                              f'State: {_[3]},  PID: {_[4]}'
+                    print(message)
 
-        logs, event_ids = win.evtx_parse(term_serv_remote_conn)
+            if ':3389' in dest_ip:
+                if _ not in self.win_conn:
+                    self.win_conn.append(_)
+                    message = f'UserWatch.windows | Network | Connected | Egress (Outgoing) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                              f'State: {_[3]},  PID: {_[4]}'
+                    print(message)
 
-        # Compare by iter #TODO Dictionary for tracking evtx activity
-        evtx_dict = {}
+        # check for disconnected rdp connections
+        for _ in self.win_conn:
+            source_ip = _[1]
+            dest_ip = _[2]
 
-        for i in logs:
-            try:
-                timestamp = i["System"]["TimeCreated"]["@SystemTime"]
-                username = i['UserData']['EventXML']['Param1']
+            # The connection no longer shows up in netstat
+            if _ not in netstat_results:
+                if ':3389' in source_ip:
+                        message = f'UserWatch.windows | Network | Disconnected | Ingress (Incoming) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                                  f'State: DISCONNECTED,  PID: {_[4]}'
+                        print(message)
+                if ':3389' in dest_ip:
+                        message = f'UserWatch.windows | Network | Disconnected | Egress (Outgoing) | {_[0]}, SIP:{_[1]}, DIP:{_[2]}, ' \
+                                  f'State: DISCONNECTED,  PID: {_[4]}'
+                        print(message)
+                # Remove from win_conn
+                self.win_conn.remove(_)
 
-                hostname_account_type = i['UserData']['EventXML']['Param2']
-                ip_address = i['UserData']['EventXML']['Param3']
-
-                for _ in quser_results:
-                    if _[0] == username:
-                        if ip_address not in evtx_dict[username]['ips']:
-                            evtx_dict[username]['ips'] = evtx_dict[username]['ips'].append(ip_address)
-
-                        if hostname_account_type not in evtx_dict[username]['hostnames']:
-                            evtx_dict[username]['hostnames'] = [hostname_account_type].append(hostname_account_type)
-
-            except Exception as error:
-                print(error)
-                message = f'Error | UserWatch.windows() | {error}'
-                print(traceback.print_exc())
-
+        # check for user sessions
         for _ in quser_results:
-            print(evtx_dict[_[0]])
-            if _[0] == evtx_dict[_[0]]:
-                print(quser_results, evtx_dict[_[0]])
+            if _ not in self.quser_conn:
+                self.quser_conn.append(_)
+                message = f'UserWatch.windows | User Session | Username: {_[0]}, Type: {_[1]}, State: {_[2]}, ' \
+                          f'Idle Time: {_[3]}, LogonTime: {_[4]}'
+                print(message)
+
+        # check for disconnected user sessions
+        for _ in self.quser_conn:
+            # The connection no longer shows up in quser
+            if _ not in quser_results:
+                # Remove from quser_conn
+                self.quser_conn.remove(_)
+
+        # #term_serv_remote_conn = 'C:\\Windows\\System32\\winevt\\Logs\\' \
+        # #                        'Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx'
+        #
+        # win = Windows()
+        #
+        # logs, event_ids = win.evtx_parse(term_serv_remote_conn)
+        #
+        # # Compare by iter #TODO Dictionary for tracking evtx activity
+        # evtx_dict = {}
+        #
+        # for i in logs:
+        #     try:
+        #         timestamp = i["System"]["TimeCreated"]["@SystemTime"]
+        #         username = i['UserData']['EventXML']['Param1']
+        #
+        #         hostname_account_type = i['UserData']['EventXML']['Param2']
+        #         ip_address = i['UserData']['EventXML']['Param3']
+        #
+        #         for _ in quser_results:
+        #             if _[0] == username:
+        #
+        #                 if ip_address not in evtx_dict[username]['ips']:
+        #                     evtx_dict[username]['ips'] = evtx_dict[username]['ips'].append(ip_address)
+        #
+        #                 if hostname_account_type not in evtx_dict[username]['hostnames']:
+        #                     evtx_dict[username]['hostnames'] = [hostname_account_type].append(hostname_account_type)
+        #
+        #     except Exception as error:
+        #         print(error)
+        #         message = f'Error | UserWatch.windows() | {error}'
+        #         print(traceback.print_exc())
+        #
+        # for _ in quser_results:
+        #     print(evtx_dict[_[0]])
+        #     if _[0] == evtx_dict[_[0]]:
+        #         print(quser_results, evtx_dict[_[0]])
 
 
 class CLIWin:
