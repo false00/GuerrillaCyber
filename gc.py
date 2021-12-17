@@ -114,7 +114,7 @@ class UserWatch:
 
         for i in logs:
             try:
-                event_id = i['Event']['System']['EventID']['#text']
+                event_id = i['System']['EventID']['#text']
                 timestamp = i["System"]["TimeCreated"]["@SystemTime"]
                 username = i['UserData']['EventXML']['Param1']
                 hostname_account_type = i['UserData']['EventXML']['Param2']
